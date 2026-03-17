@@ -4,6 +4,7 @@
 
 import numpy as np
 import pandas as pd
+import yfinance as yf  # --- ALTERADO: Import necessário para baixar dados de 2024 ---
 
 import torch
 import torch.nn as nn
@@ -15,14 +16,40 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from scipy.stats import norm
 import matplotlib.pyplot as plt
+
+# --- ALTERADO: Importando a sua função de volatilidade ---
+from volatilidade_historica import calcular_volatilidade_historica
+
 # ============================================================
-# 1. LEITURA DA BASE
+# 1. LEITURA DA BASE E CÁLCULO DA VOLATILIDADE
 # ============================================================
 
 df = pd.read_csv("base_black_scholes_petr4_2025.csv")
 
 # Apenas opções de compra
 df = df[df["tipo"] == "CALL"].reset_index(drop=True)
+
+df['data'] = pd.to_datetime(df['data'])
+
+print("Baixando histórico da PETR4 para cálculo da volatilidade...")
+petr4 = yf.download("PETR4.SA", start="2024-11-01", end="2025-12-31", progress=False)['Close']
+petr4 = petr4.reset_index()
+
+if isinstance(petr4.columns, pd.MultiIndex):
+    petr4.columns = petr4.columns.get_level_values(0)
+
+petr4.columns = ['data', 'S_hist']
+petr4['data'] = pd.to_datetime(petr4['data']).dt.tz_localize(None)
+
+# Aplicando a sua função do arquivo importado
+petr4['sigma_hist'] = calcular_volatilidade_historica(petr4['S_hist'], janela=20)
+
+# Cruzando os dados de volatilidade calculada com a nossa base de opções
+df = pd.merge(df, petr4[['data', 'sigma_hist']], on='data', how='left')
+df['sigma_hist'] = df['sigma_hist'].ffill()  # Preenche eventuais buracos de feriados
+
+# -----------------------------------------------------------------
+
 # ============================================================
 # 2. CLASSIFICAÇÃO OTM / ATM / ITM (CALL)
 # ============================================================
@@ -35,7 +62,9 @@ def classify_moneyness(row, eps=0.02):
     else:
         return "OTM"
 
+
 df["moneyness"] = df.apply(classify_moneyness, axis=1)
+
 # ============================================================
 # 3. ONE-HOT ENCODING DA MONEINESS
 # ============================================================
@@ -46,8 +75,11 @@ df = pd.get_dummies(df, columns=["moneyness"])
 # 4. DEFINIÇÃO DAS VARIÁVEIS
 # ============================================================
 
-# Variáveis contínuas
-X_cont = df[["S", "K", "T"]].values
+# --- ALTERADO: Adicionando a Taxa Livre de Risco (r) e atualizando os inputs ---
+df['r'] = 0.10  # Taxa de juros de 10%
+
+# Variáveis contínuas (Agora com 5 variáveis, conforme metodologia do TCC)
+X_cont = df[["S", "K", "T", "sigma_hist", "r"]].values
 
 # Variáveis categóricas (não escalar!)
 X_cat = df[
@@ -66,6 +98,7 @@ y = df["C"].values.reshape(-1, 1)
 
 scaler_y = StandardScaler()
 y_scaled = scaler_y.fit_transform(y)
+
 # ============================================================
 # 5. DIVISÃO TREINO / VAL / TEST (COM ÍNDICES)
 # ============================================================
@@ -81,6 +114,7 @@ X_val, X_test, y_val, y_test, idx_val, idx_test = train_test_split(
 )
 
 df_test = df.iloc[idx_test].copy()
+
 # ============================================================
 # 6. CONVERSÃO PARA TENSORES
 # ============================================================
@@ -93,6 +127,8 @@ y_val = torch.tensor(y_val, dtype=torch.float32)
 
 X_test = torch.tensor(X_test, dtype=torch.float32)
 y_test = torch.tensor(y_test, dtype=torch.float32)
+
+
 # ============================================================
 # 7. DEFINIÇÃO DA RNA (MLP COM TANH)
 # ============================================================
@@ -101,17 +137,21 @@ class OptionPricingNN(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(6, 32),
-            nn.Tanh(),
-            nn.Linear(32, 32),
-            nn.Tanh(),
+            nn.Linear(8, 128),  # 8 entradas (5 contínuas + 3 moneyness)
+            nn.ReLU(),  # Trocamos Tanh por ReLU
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
             nn.Linear(32, 1)
         )
 
     def forward(self, x):
         return self.net(x)
 
+
 model = OptionPricingNN()
+
 # ============================================================
 # 8. TREINAMENTO
 # ============================================================
@@ -119,7 +159,7 @@ model = OptionPricingNN()
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-epochs = 500
+epochs = 100
 
 for epoch in range(epochs):
     model.train()
@@ -138,6 +178,7 @@ for epoch in range(epochs):
             val_loss = criterion(val_pred, y_val)
 
         print(f"Epoch {epoch} | Train MSE: {loss.item():.4f} | Val MSE: {val_loss.item():.4f}")
+
 # ============================================================
 # 9. AVALIAÇÃO DA RNA (ESCALA ORIGINAL)
 # ============================================================
@@ -155,24 +196,25 @@ mae_rna = mean_absolute_error(y_test_real, test_pred)
 print("\nRNA RESULTS")
 print("MSE:", mse_rna)
 print("MAE:", mae_rna)
+
+
 # ============================================================
 # 10. BLACK-SCHOLES (MESMO CONJUNTO DE TESTE)
 # ============================================================
 
 def black_scholes_call(S, K, T, r, sigma):
-    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
 
-r = 0.10
-sigma_bs = 0.30
 
+# --- ALTERADO: Removidos r e sigma estáticos. Usando valores do DataFrame ---
 df_test["C_BS"] = black_scholes_call(
     df_test["S"].values,
     df_test["K"].values,
     df_test["T"].values,
-    r,
-    sigma_bs
+    df_test["r"].values,
+    df_test["sigma_hist"].values
 )
 
 mse_bs = mean_squared_error(df_test["C"], df_test["C_BS"])
@@ -181,6 +223,7 @@ mae_bs = mean_absolute_error(df_test["C"], df_test["C_BS"])
 print("\nBLACK-SCHOLES RESULTS")
 print("MSE:", mse_bs)
 print("MAE:", mae_bs)
+
 # ============================================================
 # 11. GRÁFICOS DIAGNÓSTICOS POR MONEINESS
 # ============================================================
@@ -198,6 +241,7 @@ plt.ylabel("Erro absoluto |C - Ĉ|")
 plt.title("Erro da RNA por moneyness")
 plt.legend()
 plt.show()
+
 plt.figure()
 
 for label in ["ITM", "ATM", "OTM"]:
@@ -213,6 +257,7 @@ plt.ylabel("Preço estimado pela RNA")
 plt.title("RNA: Preço real vs estimado por moneyness")
 plt.legend()
 plt.show()
+
 plt.figure()
 
 for label in ["ITM", "ATM", "OTM"]:
