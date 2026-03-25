@@ -81,4 +81,3 @@ for c in ["preco_ultimo","preco_abertura","preco_max","preco_min","preco_exercic
 
 df.to_parquet("b3_2025.parquet")
 
-print("Base 2025 pronta!")

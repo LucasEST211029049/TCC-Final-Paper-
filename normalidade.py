@@ -45,6 +45,6 @@ if shapiro_p < 0.05:
     print("\nCONCLUSÃO: Rejeitamos a hipótese nula. Os dados NÃO seguem uma distribuição Normal.")
     print("Isso justifica o uso de Redes Neurais, que não exigem essa premissa!")
 else:
-    print("\--- Resultados dos Testes de Normalidade ---")
+    print("--- Resultados dos Testes de Normalidade ---")
 
 

@@ -44,5 +44,3 @@ petr_opcoes[["ticker","data","tipo","S","K","T","C"]].to_csv(
     "base_black_scholes_petr4_2025.csv",
     index=False
 )
-
-print("Base pronta para Black-Scholes!")
