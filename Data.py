@@ -68,14 +68,11 @@ df = pd.read_fwf(
     encoding="latin1"
 )
 
-# remove header e trailer
 df = df[df["tipo_registro"] == 1]
 
-# datas
 df["data"] = pd.to_datetime(df["data"], format="%Y%m%d")
 df["data_vencimento"] = pd.to_datetime(df["data_vencimento"], format="%Y%m%d", errors="coerce")
 
-# preços (B3 multiplica por 100)
 for c in ["preco_ultimo","preco_abertura","preco_max","preco_min","preco_exercicio"]:
     df[c] = df[c] / 100
 

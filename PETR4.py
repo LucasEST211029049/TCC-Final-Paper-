@@ -32,8 +32,6 @@ petr_opcoes["T"] = (
 
 petr_opcoes = petr_opcoes[petr_opcoes["T"] > 0]
 
-r = 0.105  # ~10,5% a.a. (SELIC média 2025 aproximada)
-
 petr_opcoes = petr_opcoes[
     (petr_opcoes["C"] > 0.01) &
     (petr_opcoes["S"] > 1) &
