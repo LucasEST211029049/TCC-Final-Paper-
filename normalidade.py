@@ -34,7 +34,7 @@ plt.show()
 # 5. Testes Estatísticos Formais
 shapiro_stat, shapiro_p = stats.shapiro(log_returns)
 jarque_bera_stat, jarque_bera_p = stats.jarque_bera(log_returns)
-ks_stat, ks_p = stats.kstest(log_returns, 'norm', args=(mu, std))
+
 
 print(f"--- Resultados dos Testes de Normalidade ---")
 print(f"Shapiro-Wilk: p-valor = {shapiro_p:.5f} (H0: É Normal)")

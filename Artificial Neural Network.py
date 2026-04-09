@@ -63,7 +63,7 @@ def classify_moneyness(row, eps=0.02):
 df["moneyness"] = df.apply(classify_moneyness, axis=1)
 df = pd.get_dummies(df, columns=["moneyness"])
 
-df['r'] = 0.10
+df['r'] = 0.135
 colunas_cont = ["S", "K", "T", "sigma_hist", "r"]
 X_cont = df[colunas_cont].values
 colunas_cat = ["moneyness_ITM", "moneyness_ATM", "moneyness_OTM"]
@@ -209,7 +209,7 @@ def calc_metrics(df_subset, true_col, pred_col):
 
 df_test['maturidade'] = pd.cut(df_test['T'], bins=[-np.inf, 0.25, 0.75, np.inf], labels=['Curta', 'Média', 'Longa'])
 
-print("\n=== DESEMPENHO DA RNA POR MONEYNESS E MATURIDADE ===")
+print("\n DESEMPENHO DA RNA POR MONEYNESS E MATURIDADE ")
 for moneyness in ["ITM", "ATM", "OTM"]:
     for mat in ["Curta", "Média", "Longa"]:
         subset = df_test[(df_test[f"moneyness_{moneyness}"] == 1) & (df_test['maturidade'] == mat)]
@@ -223,7 +223,7 @@ print("\n--- CALCULANDO A ANÁLISE DE SENSIBILIDADE (DELTA EMPÍRICO) ---")
 median_K = np.median(df_test["K"])
 median_T = np.median(df_test["T"])
 median_sigma = np.median(df_test["sigma_hist"])
-median_r = 0.10
+median_r = 0.135
 
 S_range = np.linspace(median_K * 0.5, median_K * 1.5, 100)
 
